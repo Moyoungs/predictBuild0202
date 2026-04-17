@@ -1,28 +1,12 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo   ?? ????? ??? ???
+echo   Bridge Quantity Aggregator
 echo ============================================
 echo.
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [??] Python? ???? ?? ????.
-    echo https://www.python.org/downloads/ ?? ?????.
-    pause
-    exit /b 1
-)
-uv --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [??] uv ?? ?...
-    pip install uv --quiet
-)
-if not exist .venv (
-    echo [?? ??] ?? ?? ?... 2-3? ????.
-    uv venv
-    uv sync
-    echo [?? ??]
-)
+echo Starting... Please wait.
+echo Close this window to stop.
 echo.
-echo ????? ????. ????? ? ?? ????.
-.venv\Scripts\streamlit run src\quantity_aggregator\ui\app.py --server.headless true
+start "" http://localhost:8501
+%~dp0python-embed\python.exe -m streamlit run %~dp0src\quantity_aggregator\ui\app.py --server.headless true
 pause
