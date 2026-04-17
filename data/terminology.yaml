@@ -1,0 +1,691 @@
+# ================================================================
+# 교량 수량집계표 용어 사전 (Terminology Dictionary)
+# ================================================================
+# 용도: 여러 수량산출서의 이질적 표기를 총괄집계표 표준 용어로 매핑
+# 근거: 갈전7교 프로젝트 (01~05 입력 + 00 출력) 실제 데이터 분석
+# 구조:
+#   - units: 단위 정규화
+#   - categories: 총괄집계표 대분류(토공/구조물공/가시설/지반개량/가축도)
+#   - work_types: 공종 상세 매핑
+#   - rebar_specs: 철근 규격 정규화
+#   - concrete_specs: 콘크리트 규격 정규화
+#   - structures: 구조물 구분 매핑
+# ================================================================
+
+metadata:
+  version: "0.1.0"
+  created_from: "갈전7교 프로젝트 (2026)"
+  last_updated: "2026-04-16"
+  description: "교량 수량집계표 자동화를 위한 용어 정규화 사전"
+
+# ----------------------------------------------------------------
+# 1. 단위 정규화 (Unit Normalization)
+# ----------------------------------------------------------------
+# 모든 단위를 표준 표기(standard)로 통일
+# 비교 시 소문자 + 공백제거 비교 권장
+units:
+  "m3":
+    aliases: ["m³", "㎥", "M³", "M3", "m3", "CM", "C.M", "C.M.", "cbm", "입방미터", "세제곱미터"]
+    description: "체적 (콘크리트, 토공 등)"
+    dimension: "volume"
+
+  "m2":
+    aliases: ["m²", "㎡", "M²", "M2", "m2", "SM", "S.M", "S.M.", "제곱미터", "평방미터"]
+    description: "면적 (거푸집, 포장, 방수 등)"
+    dimension: "area"
+
+  "m":
+    aliases: ["m", "M", "미터"]
+    description: "길이"
+    dimension: "length"
+
+  "ton":
+    aliases: ["ton", "TON", "Ton", "t", "T", "톤", "tonf"]
+    description: "중량 (철근, 시멘트)"
+    dimension: "weight"
+
+  "kg":
+    aliases: ["kg", "KG", "Kg", "킬로그램"]
+    description: "중량 (소량 자재)"
+    dimension: "weight"
+
+  "EA":
+    aliases: ["EA", "ea", "Ea", "개", "NR", "nr", "Nr"]
+    description: "개수"
+    dimension: "count"
+
+  "본":
+    aliases: ["본", "BN", "bn"]
+    description: "개수 (말뚝, 버팀보 등)"
+    dimension: "count"
+
+  "개소":
+    aliases: ["개소", "ㄱㅅ", "LOC"]
+    description: "위치/지점 수"
+    dimension: "count"
+
+  "회":
+    aliases: ["회", "TIMES", "times"]
+    description: "작업 반복 횟수 (조립/해체, 시험 등)"
+    dimension: "count"
+
+  "hr":
+    aliases: ["hr", "HR", "Hr", "시간", "시"]
+    description: "시간 (물푸기 등)"
+    dimension: "time"
+
+  "포대":
+    aliases: ["포대", "포", "BAG", "bag"]
+    description: "시멘트 포대"
+    dimension: "count"
+
+  "식":
+    aliases: ["식", "SET", "set"]
+    description: "일식 (설계/계산 단위)"
+    dimension: "lump_sum"
+
+# ----------------------------------------------------------------
+# 2. 총괄집계 대분류 (Top-level Categories)
+# ----------------------------------------------------------------
+# 출력 00 총괄집계표의 시트 구조에 대응
+categories:
+  - id: "earthwork"
+    name: "토공"
+    output_sheet: "토공총괄집계표"
+    source_files: ["02_토공수량", "03_가축도공"]
+    description: "터파기, 되메우기, 뒷채움, 유용토 등"
+
+  - id: "structure"
+    name: "구조물공"
+    output_sheet: "구조물공총괄집계표"
+    source_files: ["01_일반수량"]
+    description: "콘크리트, 거푸집, 동바리 등 본체 시공 관련"
+
+  - id: "rebar"
+    name: "철근"
+    output_sheet: "철근총괄"
+    source_files: ["01_일반수량"]
+    description: "철근 규격별 수량 (NET/ADD)"
+
+  - id: "temp_structure"
+    name: "가시설공"
+    output_sheet: null  # 총괄집계표에 별도 시트 없음, 내역서로 통합
+    source_files: ["04_가시설공"]
+    description: "H-PILE, SHEET PILE, 버팀보 등 가설 흙막이"
+
+  - id: "ground_improvement"
+    name: "지반개량공"
+    output_sheet: null  # 내역서로 통합
+    source_files: ["05_지반개량"]
+    description: "D.C.M, 심층혼합처리 등"
+
+  - id: "temp_road"
+    name: "가축도공"
+    output_sheet: null  # 토공총괄에 '가축도' 컬럼으로 통합
+    source_files: ["03_가축도공"]
+    description: "임시 가설 도로"
+
+  - id: "material"
+    name: "자재"
+    output_sheet: "주요자재"
+    source_files: ["*"]  # 모든 파일에서 집계
+    description: "철근/레미콘/시멘트/골재 등 자재별 집계"
+
+# ----------------------------------------------------------------
+# 3. 공종(Work Type) 상세 매핑
+# ----------------------------------------------------------------
+# 각 공종이 어느 대분류에 속하는지 + 표기 변형
+work_types:
+
+  # ====== 토공 관련 ======
+  - standard: "터파기"
+    category: "earthwork"
+    aliases: ["터파기", "굴착", "EXCAVATION", "굴토"]
+    subtypes: ["육상토사", "육상리핑암", "육상발파암", "용수토사", "용수리핑암", "용수발파암"]
+
+  - standard: "구조물터파기"
+    category: "earthwork"
+    aliases: ["구조물터파기", "기초터파기"]
+
+  - standard: "수중터파기"
+    category: "earthwork"
+    aliases: ["수중터파기", "용수터파기"]
+
+  - standard: "되메우기"
+    category: "earthwork"
+    aliases: ["되메우기", "되메우기및다짐", "되메움"]
+
+  - standard: "뒷채움"
+    category: "earthwork"
+    aliases: ["뒷채움", "교대뒷채움", "SB-1"]
+
+  - standard: "물푸기"
+    category: "earthwork"
+    aliases: ["물푸기", "물푸기공", "배수작업"]
+
+  - standard: "유용토"
+    category: "earthwork"
+    aliases: ["유용토", "유용"]
+
+  - standard: "면고르기"
+    category: "earthwork"
+    aliases: ["면고르기", "면정리", "면정리 및 청소"]
+
+  # ====== 구조물공 ======
+  - standard: "콘크리트"
+    category: "structure"
+    aliases: ["콘크리트", "Con'c", "Conc", "CONC", "Concrete", "레미콘", "철근콘크리트", "무근콘크리트"]
+    subtypes: ["철근콘크리트", "무근콘크리트"]
+
+  - standard: "콘크리트타설"
+    category: "structure"
+    aliases: ["콘크리트 타설", "콘크리트타설", "타설", "펌프카타설"]
+
+  - standard: "거푸집"
+    category: "structure"
+    aliases: ["거푸집", "FORM", "합판거푸집", "강재거푸집"]
+    subtypes: ["합판3회", "합판4회", "합판6회", "무늬", "강재", "강재원형"]
+
+  - standard: "동바리"
+    category: "structure"
+    aliases: ["동바리", "SUPPORT", "시스템동바리", "강관동바리"]
+
+  - standard: "비계"
+    category: "structure"
+    aliases: ["비계", "시스템비계", "강관비계", "SCAFFOLD"]
+
+  - standard: "스페이셔"
+    category: "structure"
+    aliases: ["스페이셔", "스페이서", "SPACER"]
+
+  - standard: "철근가공조립"
+    category: "structure"
+    aliases: ["철근가공조립", "철근조립", "철근가공"]
+
+  - standard: "슬래브양생"
+    category: "structure"
+    aliases: ["슬래브 양생", "슬래브양생", "양생"]
+
+  - standard: "콘크리트양생"
+    category: "structure"
+    aliases: ["콘크리트 양생", "콘크리트양생"]
+
+  - standard: "ASP방수"
+    category: "structure"
+    aliases: ["ASP 방수", "ASP방수", "아스팔트방수"]
+
+  - standard: "ASCON포장"
+    category: "structure"
+    aliases: ["ASCON 포장", "ASCON포장", "아스콘포장"]
+
+  - standard: "교면방수"
+    category: "structure"
+    aliases: ["교면방수", "도막식", "침투식"]
+
+  - standard: "택코팅"
+    category: "structure"
+    aliases: ["택 코팅", "택코팅", "TACK COAT"]
+
+  - standard: "강관말뚝"
+    category: "structure"
+    aliases: ["강관말뚝", "STEEL PILE", "스틸파일", "PIPE PILE"]
+
+  - standard: "교명판"
+    category: "structure"
+    aliases: ["교명판"]
+
+  - standard: "설명판"
+    category: "structure"
+    aliases: ["설명판"]
+
+  - standard: "TBM설치"
+    category: "structure"
+    aliases: ["TBM설치", "TBM 설치"]
+
+  - standard: "배수시설"
+    category: "structure"
+    aliases: ["배수시설", "집수구", "배수구"]
+
+  - standard: "난간"
+    category: "structure"
+    aliases: ["난간", "RAIL", "방호울타리"]
+
+  - standard: "DOWEL BAR"
+    category: "structure"
+    aliases: ["DOWEL BAR", "다웰바", "Dowel Bar"]
+
+  - standard: "스티로폼"
+    category: "structure"
+    aliases: ["스티로폼", "Styrofoam", "EPS"]
+
+  - standard: "NOTCH"
+    category: "structure"
+    aliases: ["NOTCH", "노치"]
+
+  # ====== 지반개량공 ======
+  - standard: "심층혼합처리"
+    category: "ground_improvement"
+    aliases: ["심층혼합처리", "심층혼합처리(개량공)", "심층혼합처리(공삭공)", "D.C.M", "DCM", "Deep Cement Mixing", "심층혼합"]
+
+  - standard: "PILE DRIVER 조립해체"
+    category: "ground_improvement"
+    aliases: ["PILE DRIVER 및 PLANT\n조립및해체", "PILE DRIVER 및 PLANT 조립및해체", "파일드라이버 조립해체"]
+
+  - standard: "PETMAT"
+    category: "ground_improvement"
+    aliases: ["PETMAT", "펫매트"]
+
+  - standard: "이토처리"
+    category: "ground_improvement"
+    aliases: ["이토처리", "슬라임처리"]
+
+  - standard: "시멘트"
+    category: "ground_improvement"
+    aliases: ["시 멘 트", "시멘트", "CEMENT"]
+
+  # ====== 가축도공 ======
+  - standard: "흙쌓기및헐기"
+    category: "temp_road"
+    aliases: [" 흙쌓기 및 헐기", "흙쌓기 및 헐기", "가도성토 및 철거", "흙쌓기및헐기"]
+
+  - standard: "PP마대쌓기및헐기"
+    category: "temp_road"
+    aliases: [" P.P마대\n쌓기 및 헐기", "P.P마대\n쌓기 및 헐기", "PP마대", "P.P마대 쌓기 및 헐기"]
+
+  - standard: "가배수관설치철거"
+    category: "temp_road"
+    aliases: ["가배수관\n설치 및 철거", "가배수관 설치 및 철거", "가배수관"]
+
+  - standard: "복구유지보수"
+    category: "temp_road"
+    aliases: ["복구 및 유지보수비", "복구유지보수"]
+  - standard: "H-PILE 천공"
+    category: "temp_structure"
+    aliases: ["H-PILE 천공", "H파일천공", "H-Pile 천공"]
+
+  - standard: "H-PILE 항타"
+    category: "temp_structure"
+    aliases: ["H-PILE 항타", "H파일항타"]
+
+  - standard: "H-PILE 두부정리"
+    category: "temp_structure"
+    aliases: ["H-PILE 두부정리", "H파일두부정리"]
+
+  - standard: "H-PILE 연결해체"
+    category: "temp_structure"
+    aliases: ["H-PILE 연결 및 해체", "H파일 연결 및 해체"]
+
+  - standard: "H-PILE 인발"
+    category: "temp_structure"
+    aliases: ["H-PILE 인발", "H파일인발"]
+
+  - standard: "케이싱튜브"
+    category: "temp_structure"
+    aliases: ["케이싱 튜브 설치 철거", "케이싱튜브 설치 철거", "CASING TUBE"]
+
+  - standard: "모래채움"
+    category: "temp_structure"
+    aliases: ["모래 채움", "모래채움", "SAND FILL"]
+
+  - standard: "토류판"
+    category: "temp_structure"
+    aliases: ["토류판 설치 및 철거", "토류판설치철거", "토류판"]
+
+  - standard: "SHEET PILE 항타"
+    category: "temp_structure"
+    aliases: ["SHEET PILE 항타", "시트파일항타", "쉬트파일항타"]
+
+  - standard: "SHEET PILE 인발"
+    category: "temp_structure"
+    aliases: ["SHEET PILE 인발", "시트파일인발"]
+
+  - standard: "SHEET PILE 코너파일"
+    category: "temp_structure"
+    aliases: ["SHEET PILE 코너 파일 제작", "코너파일제작"]
+
+  - standard: "SHEET PILE 절단"
+    category: "temp_structure"
+    aliases: ["SHEET PILE 절단", "시트파일절단"]
+
+  - standard: "어스앵커 천공"
+    category: "temp_structure"
+    aliases: ["어스앵커 천공", "EARTH ANCHOR 천공", "E/A 천공"]
+
+  - standard: "PC강선 조립삽입"
+    category: "temp_structure"
+    aliases: ["P.C 강선 조립 및 삽입", "PC강선 조립삽입"]
+
+  - standard: "그라우팅"
+    category: "temp_structure"
+    aliases: ["그라우팅", "GROUTING", "Grouting"]
+
+  - standard: "차수그라우팅"
+    category: "temp_structure"
+    aliases: ["차수 그라우팅", "차수그라우팅"]
+
+  - standard: "PC콘 조립인장"
+    category: "temp_structure"
+    aliases: ["P.C 콘 조립 및 인장", "PC콘 조립인장"]
+
+  - standard: "지압판 제작설치"
+    category: "temp_structure"
+    aliases: ["지압판 제작 및 설치", "지압판 제작설치"]
+
+  - standard: "지압판 철거"
+    category: "temp_structure"
+    aliases: ["지압판 철거"]
+
+  - standard: "장비조립해체"
+    category: "temp_structure"
+    aliases: ["장비조립 및 해체", "장비조립해체"]
+
+  - standard: "가이드빔 기준틀 제작"
+    category: "temp_structure"
+    aliases: ["가이드 빔 기준틀 제작", "가이드빔 기준틀 제작"]
+
+  - standard: "가이드빔 기준틀 이동설치"
+    category: "temp_structure"
+    aliases: ["가이드빔 기준틀 이동 및 설치", "가이드 빔 기준틀 이동 및 설치"]
+
+  - standard: "지수제 도포"
+    category: "temp_structure"
+    aliases: ["지수제 도포", "지수제도포"]
+
+  - standard: "띠장 설치철거"
+    category: "temp_structure"
+    aliases: ["띠장 설치 및 철거", "띠장설치철거"]
+
+  - standard: "띠장 이음해체"
+    category: "temp_structure"
+    aliases: ["띠장 이음 및 해체", "띠장이음해체"]
+
+  - standard: "띠장 우각부"
+    category: "temp_structure"
+    aliases: ["띠장 우각부 연결 및 해체", "띠장우각부"]
+
+  - standard: "보걸이 설치철거"
+    category: "temp_structure"
+    aliases: ["보걸이 설치 및  철거", "보걸이 설치 및 철거", "보걸이"]
+
+  - standard: "버팀보 제작"
+    category: "temp_structure"
+    aliases: ["버팀보 제작"]
+
+  - standard: "버팀보 설치철거"
+    category: "temp_structure"
+    aliases: ["버팀보 설치 및 철거", "버팀보설치철거"]
+
+  - standard: "경사버팀보 제작"
+    category: "temp_structure"
+    aliases: ["경사 버팀보 제작", "경사버팀보제작"]
+
+  - standard: "경사버팀보 설치철거"
+    category: "temp_structure"
+    aliases: ["경사 버팀보 설치 및 철거"]
+
+  - standard: "경사버팀보 화타"
+    category: "temp_structure"
+    aliases: ["경사 버팀보 화타 제작 및 설치 철거"]
+
+  - standard: "JACK 설치철거"
+    category: "temp_structure"
+    aliases: ["JACK 설치 철거", "잭설치철거"]
+
+  - standard: "사보강재 제작"
+    category: "temp_structure"
+    aliases: ["사보강재 제작"]
+
+  - standard: "사보강재 설치철거"
+    category: "temp_structure"
+    aliases: ["사보강재 설치 및 철거"]
+
+  - standard: "사보강재 화타"
+    category: "temp_structure"
+    aliases: ["사보강재 화타 제작 및 설치철거"]
+
+  - standard: "L-형강"
+    category: "temp_structure"
+    aliases: ["L-형강 설치 및 철거", "L형강"]
+
+  - standard: "스티프너"
+    category: "temp_structure"
+    aliases: ["스티프너 설치 및 철거", "STIFFENER"]
+
+  - standard: "ㄷ-CHANNEL"
+    category: "temp_structure"
+    aliases: ["ㄷ-CHANNEL 설치 및 철거", "C-CHANNEL"]
+
+  - standard: "ROCK BOLT"
+    category: "temp_structure"
+    aliases: ["ROCK BOLT 설치공", "록볼트"]
+
+  - standard: "강재 사용료운반비"
+    category: "temp_structure"
+    aliases: ["강재 사용료 및 운반비", "강재사용료운반비"]
+
+  - standard: "가설계단"
+    category: "temp_structure"
+    aliases: ["가설 계단", "가설계단"]
+
+  - standard: "공제토"
+    category: "earthwork"
+    aliases: ["공제토"]
+
+  - standard: "Sheet-Pile"
+    category: "temp_structure"
+    aliases: ["Sheet-Pile", "시트파일", "SHEET PILE"]
+
+  - standard: "JACK"
+    category: "temp_structure"
+    aliases: ["JACK", "잭"]
+
+  - standard: "강판"
+    category: "temp_structure"
+    aliases: ["강  판", "강판", "STEEL PLATE"]
+
+  - standard: "가이드빔및파일"
+    category: "temp_structure"
+    aliases: ["가이드 빔 및 파일", "가이드빔및파일"]
+
+  - standard: "버팀보용띠장"
+    category: "temp_structure"
+    aliases: ["버팀보용 띠장", "버팀보용띠장"]
+# 미매칭 이슈 보기용
+#  - standard: "띠장 설치철거"
+#    category: "temp_structure"
+#    aliases: ["띠장 설치 및 철거", "띠장설치철거", "띠장"]
+#
+#  - standard: "경사버팀보 제작"
+#    category: "temp_structure"
+#    aliases: ["경사 버팀보 제작", "경사버팀보제작", "경사 버팀보(L=4.400m)"]
+#
+#  - standard: "사보강재 제작"
+#    category: "temp_structure"
+#    aliases: ["사보강재 제작", "사보강재(L=1.800m)"]
+#
+#  - standard: "ㄷ-CHANNEL"
+#    category: "temp_structure"
+#    aliases: ["ㄷ-CHANNEL 설치 및 철거", "C-CHANNEL", "ㄷ-형강"]
+#
+#  - standard: "L-형강"
+#    category: "temp_structure"
+#    aliases: ["L-형강 설치 및 철거", "L형강", "L-형강"]
+
+
+
+
+
+# ----------------------------------------------------------------
+# 4. 철근 규격 정규화
+# ----------------------------------------------------------------
+# 한국 표준: SD400(일반) = D시리즈, SD400HR/고강도 = H시리즈
+# 실제 데이터는 H 표기 우세 (갈전7교 프로젝트 전체 H 사용)
+rebar_specs:
+  prefixes:
+    "H":
+      description: "고강도 이형철근 (SD400 등)"
+      aliases: ["H", "HD"]
+    "D":
+      description: "일반 이형철근"
+      aliases: ["D", "SD"]
+
+  # 지름(mm) 목록 (H/D 공통)
+  diameters: [10, 13, 16, 19, 22, 25, 29, 32, 35, 38, 41, 51]
+
+  # 표준 표기 규칙: {prefix}{diameter}  예: H25, D13
+  normalize_pattern: "^([HD])D?(10|13|16|19|22|25|29|32|35|38|41|51)$"
+
+  unit: "ton"
+
+# ----------------------------------------------------------------
+# 5. 콘크리트 규격 정규화
+# ----------------------------------------------------------------
+# 한국 레미콘 표준 표기: {굵은골재최대치수}-{설계기준강도}-{슬럼프}
+# 예: 25-27-150  (굵은골재 25mm, fck=27MPa, 슬럼프 150mm)
+concrete_specs:
+  standard_pattern: "^(\\d+)-(\\d+)-(\\d+)$"
+  slump_variants:
+    # 슬럼프 표기 유의: 15 = 150mm, 80 = 80mm (세자리 표기가 현대 표준)
+    # 실제 데이터에서 "25-35-15"와 "25-35-150" 둘 다 등장
+    #   → 2자리면 x10 처리하여 150으로 통일
+    two_digit_to_three:
+      "15": "150"
+      "12": "120"
+      "10": "100"
+      "8": "80"
+
+  # 실제 등장 규격 (갈전7교)
+  known_mixes:
+    - "25-35-150"   # 본체 콘크리트 (fck=35, S=150)
+    - "25-27-150"   # 기초 콘크리트 (fck=27, S=150)
+    - "25-18-150"   # 버림콘크리트
+    - "25-16-150"
+    - "25-24-150"
+    - "25-35-80"
+    - "19-27-15"
+
+  # 할증률 (주요자재 집계 시 적용)
+  markup_rates:
+    "25-35-150": 0.01   # 1% 할증
+    "25-27-150": 0.01
+    "25-18-150": 0.02   # 2% 할증 (무근)
+    default: 0.01
+
+# ----------------------------------------------------------------
+# 6. 구조물 구분 (Structure Column Mapping)
+# ----------------------------------------------------------------
+# 입력 파일의 구조물 컬럼 ↔ 출력 총괄집계표 컬럼
+# ※ 프로젝트마다 달라질 수 있으므로 project_config.yaml로도 오버라이드 가능
+structures:
+  - standard: "본교"
+    aliases: ["본체", "교량", "갈전7교", "본교", "수  량", "수        량", "수 량", "수량"]
+    output_column: "갈전7교"
+    description: "주교량 본체"
+
+  - standard: "방호벽"
+    aliases: ["방호벽", "방호울타리"]
+    output_column: null   # 구조물공 총괄에서 본교에 합산
+    aggregate_into: "본교"
+
+  - standard: "접속슬래브"
+    aliases: ["접속슬래브", "Approach Slab", "접근슬래브"]
+    output_column: null
+    aggregate_into: "본교"
+
+  - standard: "옹벽"
+    aliases: ["옹벽", "옹벽공", "Retaining Wall"]
+    output_column: "옹벽"
+
+  - standard: "가축도"
+    aliases: ["가축도", "가축도공", "가설도로"]
+    output_column: "가축도"
+
+  - standard: "시점측"
+    aliases: ["시점측", "시점", "STA 시점"]
+    output_column: null   # 토공에서 본교로 합산 (입력 02번의 시점/종점)
+    aggregate_into: "본교"
+
+  - standard: "종점측"
+    aliases: ["종점측", "종점", "STA 종점"]
+    output_column: null
+    aggregate_into: "본교"
+
+# ----------------------------------------------------------------
+# 7. 집계 행(소계/합계) 식별 키워드
+# ----------------------------------------------------------------
+# 이 키워드가 포함된 행은 데이터 행이 아닌 집계 행으로 처리 (제외)
+aggregate_row_keywords:
+  - "계"
+  - "소계"
+  - "합계"
+  - "총계"
+  - "TOTAL"
+  - "Total"
+  - "total"
+  - "SUB TOTAL"
+  - "Sub Total"
+  - "소    계"   # 공백 포함 변형
+  - "합    계"
+  - "철     근     계"
+  - "철근 계"
+  - "할증 계"
+
+# ----------------------------------------------------------------
+# 8. 시트명 분류 키워드 (집계표 vs 산출근거 vs 간지)
+# ----------------------------------------------------------------
+sheet_classification:
+  aggregate_sheet:   # 이 키워드가 포함된 시트가 파싱 대상
+    priority: 1
+    keywords: ["집계표", "집계", "총괄", "수량집계"]
+    # 우선순위 규칙: 같은 파일에 여러 집계표가 있을 때
+    # '교량 일반수량 집계표' 같은 전체 집계표가 우선 → 구조물별 세부 집계표는 제외
+    prefer_patterns:
+      # 이 패턴이 매칭되면 전체 집계표로 간주 (우선 선택)
+      - "교량 일반수량 집계표"
+      - "교량 철근수량 집계표"
+      - "토공 집계표"
+      - "가축도집계"
+      - "가시설 수량 집계표"
+      - "가시설 자재 집계표"
+      - "수량집계표"
+    # 이 키워드가 포함되면 '부분' 집계표 → 전체 집계표가 있으면 스킵
+    partial_keywords:
+      - "본체"
+      - "방호벽"
+      - "접속슬래브"
+
+  calculation_sheet:  # 산출 근거 (참고용, MVP에서는 스킵)
+    priority: 2
+    keywords: ["산출근거", "산출서", "근거", "산출"]
+
+  cover_sheet:        # 표지/간지 (무시)
+    priority: 3
+    keywords: ["간지", "표지", "소간지", "표제"]
+
+  ignore:             # 완전 무시
+    keywords: ["Sheet1", "Sheet2", "Sheet3"]
+
+# ----------------------------------------------------------------
+# 9. 빈 값 표기 (Empty Value Representations)
+# ----------------------------------------------------------------
+empty_values:
+  - "-"
+  - "- "
+  - " -"
+  - "0"
+  - "0.0"
+  - ""
+  - null
+  - "N/A"
+  - "해당없음"
+
+# ----------------------------------------------------------------
+# 10. AI 판단이 필요한 케이스 (Fallback Triggers)
+# ----------------------------------------------------------------
+# 아래 케이스에 해당하면 규칙 기반 처리 실패 → Claude API 호출
+ai_fallback_triggers:
+  - "사전에 없는 공종명"
+  - "사전에 없는 단위"
+  - "복수 카테고리에 매칭되는 모호한 항목"
+  - "규격 문자열 파싱 실패 (콘크리트/철근)"
+  - "헤더 행/데이터 행 구분 실패"
