@@ -1,20 +1,20 @@
 """
-교량 수량집계표 자동화 시스템 — Streamlit UI
+교량 수량집계표 자동화 시스템 — Streamlit UI (AI 연동 버전)
 """
 import streamlit as st
 import tempfile
 import shutil
 from pathlib import Path
-from io import BytesIO
 
 # 프로젝트 루트 경로 계산
-APP_DIR = Path(__file__).resolve().parent  # ui/
-SRC_DIR = APP_DIR.parent                   # quantity_aggregator/
-PROJECT_ROOT = SRC_DIR.parent.parent       # quantity-aggregator/
+APP_DIR = Path(__file__).resolve().parent
+SRC_DIR = APP_DIR.parent
+PROJECT_ROOT = SRC_DIR.parent.parent
 
 # 모듈 경로 추가
 import sys
 sys.path.insert(0, str(SRC_DIR / "core"))
+sys.path.insert(0, str(SRC_DIR / "ai"))
 
 from parser import parse_workbook
 from normalizer import normalize_all
@@ -25,17 +25,19 @@ import yaml
 
 
 def load_terminology():
-    """용어 사전 로드"""
     term_path = PROJECT_ROOT / "data" / "terminology.yaml"
     if not term_path.exists():
-        st.error(f"❌ 용어 사전을 찾을 수 없습니다: {term_path}")
+        st.error(f"용어 사전을 찾을 수 없습니다: {term_path}")
         st.stop()
     with open(term_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
+def get_terminology_path():
+    return PROJECT_ROOT / "data" / "terminology.yaml"
+
+
 def save_uploaded_files(uploaded_files, tmp_dir: Path) -> list[Path]:
-    """업로드된 파일을 임시 디렉토리에 저장"""
     saved = []
     for uf in uploaded_files:
         file_path = tmp_dir / uf.name
@@ -46,8 +48,6 @@ def save_uploaded_files(uploaded_files, tmp_dir: Path) -> list[Path]:
 
 
 def run_pipeline(files: list[Path], terminology: dict):
-    """전체 파이프라인 실행: 파싱 → 정규화 → 집계"""
-    # 1. 파싱
     all_records = []
     parse_log = []
     for f in files:
@@ -55,10 +55,8 @@ def run_pipeline(files: list[Path], terminology: dict):
         parse_log.append({"file": f.name, "records": len(records)})
         all_records.extend(records)
 
-    # 2. 정규화
     normalize_all(all_records, terminology)
 
-    # 3. 통계
     total = len(all_records)
     wt_matched = sum(1 for r in all_records if r["normalized"]["work_type_std"])
     unit_matched = sum(1 for r in all_records if r["normalized"]["unit_std"])
@@ -69,7 +67,6 @@ def run_pipeline(files: list[Path], terminology: dict):
         for r in all_records for u in r["normalized"]["unmatched"]
     ]
 
-    # 4. 집계
     structure_agg = aggregate_by_category(all_records, "structure", terminology)
     earthwork_agg = aggregate_by_category(all_records, "earthwork", terminology)
     temp_road_agg = aggregate_by_category(all_records, "temp_road", terminology)
@@ -94,7 +91,6 @@ def run_pipeline(files: list[Path], terminology: dict):
 
 
 def generate_excel(result: dict, terminology: dict) -> bytes:
-    """집계 결과를 Excel 바이트로 생성"""
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
         tmp_path = tmp.name
 
@@ -111,13 +107,11 @@ def generate_excel(result: dict, terminology: dict) -> bytes:
 
     with open(tmp_path, "rb") as f:
         data = f.read()
-
     Path(tmp_path).unlink(missing_ok=True)
     return data
 
 
 def agg_to_table(agg_rows: list[dict]) -> list[dict]:
-    """집계 결과를 테이블 형태로 변환"""
     table = []
     for row in agg_rows:
         r = {
@@ -131,6 +125,24 @@ def agg_to_table(agg_rows: list[dict]) -> list[dict]:
         r["총계"] = row["total"]
         table.append(r)
     return table
+
+
+def check_api_key() -> bool:
+    """API 키 설정 여부 확인"""
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(PROJECT_ROOT / ".env")
+    key = os.getenv("ANTHROPIC_API_KEY", "")
+    return bool(key) and key != "sk-ant-여기에_본인키_붙여넣기"
+
+# def check_api_key() -> bool:
+#     """API 키 설정 여부 확인"""
+#     import os
+#     from dotenv import load_dotenv
+#     load_dotenv(PROJECT_ROOT / ".env")
+#     key = os.getenv("GEMINI_API_KEY", "")
+#     return bool(key)
+
 
 
 # ================================================================
@@ -152,8 +164,9 @@ def main():
         st.markdown("""
         1. 공종별 수량산출서 파일 업로드
         2. 파싱 결과 확인
-        3. 집계 결과 미리보기
-        4. Excel 다운로드
+        3. AI 자동 매핑 (미매칭 항목)
+        4. 집계 결과 미리보기
+        5. Excel 다운로드
         
         **지원 형식:** `.xlsx`, `.xls`  
         **주의:** `.xls` 파일은 Excel에서 `.xlsx`로 변환 후 업로드하세요.
@@ -164,6 +177,13 @@ def main():
         term = load_terminology()
         st.metric("등록 공종 수", f"{len(term['work_types'])}개")
         st.metric("등록 단위 수", f"{len(term['units'])}개")
+
+        # AI 상태 표시
+        has_api = check_api_key()
+        if has_api:
+            st.success("🤖 AI 연동: 활성")
+        else:
+            st.warning("🤖 AI 연동: 비활성\n\n.env에 API 키를 설정하세요.")
 
     # ---- 섹션 1: 파일 업로드 ----
     st.header("1️⃣ 파일 업로드")
@@ -195,21 +215,43 @@ def main():
     if st.button("🚀 집계 시작", type="primary", use_container_width=True):
         terminology = load_terminology()
 
-        # 임시 디렉토리에 파일 저장
         tmp_dir = Path(tempfile.mkdtemp())
         try:
             with st.status("처리 중...", expanded=True) as status:
                 st.write("📂 파일 저장 중...")
                 files = save_uploaded_files(uploaded_files, tmp_dir)
 
-                st.write("📊 파싱 중...")
+                st.write("📊 파싱 & 정규화 중...")
                 result = run_pipeline(files, terminology)
+
+                # AI 자동 매핑
+                ai_result = None
+                if result["unmatched"] and check_api_key():
+                    st.write("🤖 AI 자동 매핑 중...")
+                    try:
+                        from claude_client import process_unmatched
+                        ai_result = process_unmatched(
+                            result["unmatched"],
+                            terminology,
+                            get_terminology_path(),
+                            threshold=0.9
+                        )
+
+                        if ai_result["auto_saved_count"] > 0:
+                            st.write(f"✅ AI가 {ai_result['auto_saved_count']}개 항목을 사전에 자동 추가했습니다.")
+                            # 사전이 업데이트됐으니 다시 파싱
+                            st.write("🔄 업데이트된 사전으로 재집계 중...")
+                            terminology = load_terminology()
+                            result = run_pipeline(files, terminology)
+
+                    except Exception as e:
+                        st.write(f"⚠️ AI 매핑 중 오류 (집계는 정상 진행): {e}")
 
                 st.write("✅ 완료!")
                 status.update(label="처리 완료!", state="complete")
 
-            # 결과를 세션에 저장
             st.session_state["result"] = result
+            st.session_state["ai_result"] = ai_result
             st.session_state["terminology"] = terminology
             st.session_state["project_name"] = project_name or "프로젝트"
 
@@ -222,6 +264,7 @@ def main():
 
     result = st.session_state["result"]
     terminology = st.session_state["terminology"]
+    ai_result = st.session_state.get("ai_result")
     proj_name = st.session_state["project_name"]
 
     st.header("3️⃣ 결과")
@@ -234,6 +277,46 @@ def main():
     col4.metric("미매칭 이슈", f"{len(result['unmatched'])}건",
                 delta=None if not result['unmatched'] else "확인 필요",
                 delta_color="inverse")
+
+    # AI 매핑 결과 표시
+    if ai_result and ai_result.get("api_called"):
+        st.subheader("🤖 AI 자동 매핑 결과")
+
+        ai_col1, ai_col2, ai_col3 = st.columns(3)
+        ai_col1.metric("AI 분석 항목", f"{ai_result['total']}개")
+        ai_col2.metric("자동 승인 (≥90%)", f"{len(ai_result['auto_approved'])}개",
+                       delta="사전에 자동 저장됨" if ai_result['auto_saved_count'] > 0 else None)
+        ai_col3.metric("수동 확인 필요 (<90%)", f"{len(ai_result['needs_review'])}개",
+                       delta="확인 필요" if ai_result['needs_review'] else None,
+                       delta_color="inverse" if ai_result['needs_review'] else "off")
+
+        # 자동 승인 상세
+        if ai_result['auto_approved']:
+            with st.expander(f"✅ 자동 승인된 항목 ({len(ai_result['auto_approved'])}개)", expanded=False):
+                for m in ai_result['auto_approved']:
+                    st.write(f"  **'{m['original']}'** → {m['standard_name']} ({m['category']}) "
+                             f"| 신뢰도: {m['confidence']*100:.0f}% | {m['reasoning']}")
+
+        # 수동 확인 필요
+        if ai_result['needs_review']:
+            with st.expander(f"⚠️ 수동 확인 필요 ({len(ai_result['needs_review'])}개)", expanded=True):
+                for i, m in enumerate(ai_result['needs_review']):
+                    st.write(f"**'{m['original']}'** → 제안: {m['standard_name']} ({m['category']}) "
+                             f"| 신뢰도: {m['confidence']*100:.0f}%")
+                    st.caption(f"  판단 근거: {m['reasoning']}")
+
+                    col_a, col_b = st.columns(2)
+                    if col_a.button(f"✅ 승인", key=f"approve_{i}"):
+                        from claude_client import apply_mappings_to_terminology
+                        count = apply_mappings_to_terminology(
+                            [m], terminology, get_terminology_path()
+                        )
+                        if count > 0:
+                            st.success(f"'{m['original']}' → '{m['standard_name']}' 사전에 추가됨!")
+                            st.rerun()
+
+                    if col_b.button(f"❌ 거부", key=f"reject_{i}"):
+                        st.info(f"'{m['original']}' 거부됨. 수동으로 사전에 추가하세요.")
 
     # 파싱 로그
     with st.expander("📋 파일별 파싱 결과"):
